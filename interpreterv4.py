@@ -34,7 +34,7 @@ class Interpreter(InterpreterBase):
         ast = parse_program(program)
         self.__set_up_function_table(ast)
         self.env = EnvironmentManager()
-        self.__call_func_aux("main", [])
+        self._aux("main", [])
 
     def __set_up_function_table(self, ast):
         self.func_name_to_ast = {}
@@ -73,7 +73,7 @@ class Interpreter(InterpreterBase):
         status = ExecStatus.CONTINUE
         return_val = None
         if statement.elem_type == InterpreterBase.FCALL_NODE:
-            self.__call_func(statement)
+            self._call_func(statement)
         elif statement.elem_type == "=":
             self.__assign(statement)
         elif statement.elem_type == InterpreterBase.VAR_DEF_NODE:
@@ -87,12 +87,12 @@ class Interpreter(InterpreterBase):
 
         return (status, return_val)
     
-    def __call_func(self, call_node):
+    def _call_func(self, call_node):
         func_name = call_node.get("name")
         actual_args = call_node.get("args")
-        return self.__call_func_aux(func_name, actual_args)
+        return self._aux(func_name, actual_args)
 
-    def __call_func_aux(self, func_name, actual_args):
+    def _aux(self, func_name, actual_args):
         if func_name == "print":
             return self.__call_print(actual_args)
         if func_name == "inputi" or func_name == "inputs":
@@ -201,8 +201,11 @@ class Interpreter(InterpreterBase):
             args = expr_ast.get("args")
             
             # if eager context -> eval IMMEDIATELY!
-            if any(isinstance(self.env.get(arg_name).value(), LazyValue) for arg_name in args):
-                return self.__call_func(expr_ast)  #eval asap
+            if any( # check if args are eager
+                self.env.get(arg_name) is not None and isinstance(self.env.get(arg_name).value(), LazyValue)
+                for arg_name in args
+            ):
+                return self._call_func(expr_ast)
             # else, defer the evaluation!
             return Value(Type.NIL, LazyValue(expr_ast, self.env, self))
         
@@ -247,6 +250,12 @@ class Interpreter(InterpreterBase):
 
     def __eval_unary(self, arith_ast, t, f):
         value_obj = self._eval_expr(arith_ast.get("op1"))
+
+        if isinstance(value_obj.value(), LazyValue): # if its lazy eval it
+            value_obj = value_obj.value().evaluate()
+        
+        # print(f"Unary operation operand type: {value_obj.type()}, value: {value_obj.value()}")
+
         if value_obj.type() != t:
             super().error(
                 ErrorType.TYPE_ERROR,

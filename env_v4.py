@@ -50,6 +50,15 @@ class EnvironmentManager:
         self.environment.pop()
     
     # LAZY eval func
-    def snapshot(self): # capture deep copy of curr env for lazy eval
-        return copy.deepcopy(self)
+    def snapshot(self): 
+        # create SHALLOW copy with the obj ref!
+        snapshot_env = []
+        for func_env in self.environment:
+            snapshot_func_env = [block.copy() for block in func_env] # shallow copy each fuc block
+            snapshot_env.append(snapshot_func_env)
+
+        snapshot_manager = EnvironmentManager() # shallow copied structure!
+        snapshot_manager.environment = snapshot_env
+        return snapshot_manager
+
 

@@ -1,23 +1,23 @@
 from interpreterv4 import Interpreter # this may vary
 
 program = """
-func bar(x) {
- print("bar: ", x);
- return x;
+func zero() {
+  print("zero");
+  return 0;
+}
+
+func inc(x) {
+ print("inc:", x);
+ return x + 1;
 }
 
 func main() {
  var a;
- a = bar(0);
- a = a + bar(1);
- a = a + bar(2);
- a = a + bar(3);
- print("---");
- print(a);
- print("---");
- print(a);
+ for (a = 0; zero() + a < 3; a = inc(a)) {
+   print("x");
+ }
+ print("d");
 }
-
 """
 
 interpreter = Interpreter()

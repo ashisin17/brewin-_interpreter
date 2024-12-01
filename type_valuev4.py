@@ -70,20 +70,27 @@ class LazyValue:
         self.is_evaluated = False
 
     def evaluate(self): # eval expr LAZILY if not alr done + Cache result
-        if not self.is_evaluated:
-            # print(f"Evaluating LazyValue: {self.expr_ast}, captured env: {self.environment}")
+        if self.is_evaluated: # if alr eval, just return it
+            # print(f"Using cached LazyValue for {self.expr_ast}")
+            return self.cached_value
+        
+        # case for NOT cached valye
+        # print(f"Evaluating LazyValue: {self.expr_ast}")
 
-            previous_env = self.interpreter.env
-            self.interpreter.env = self.environment
-            try:
-                # Special handling for function calls
-                if self.expr_ast.elem_type == InterpreterBase.FCALL_NODE:
-                    self.cached_value = self.interpreter._call_func(self.expr_ast)
-                else:
-                    self.cached_value = self.interpreter._eval_expr(self.expr_ast)
-                self.is_evaluated = True
-            finally:
-                self.interpreter.env = previous_env
+        # use snap for eval
+        previous_env = self.interpreter.env
+        self.interpreter.env = self.environment # switch to capture snap
+        try:
+            # Special handling for function calls
+            if self.expr_ast.elem_type == InterpreterBase.FCALL_NODE:
+                self.cached_value = self.interpreter._call_func(self.expr_ast)
+            else:
+                self.cached_value = self.interpreter._eval_expr(self.expr_ast)
+                # if isinstance(self.cached_value.value(), LazyValue):
+                #     self.cached_value = self.cached_value.value().evaluate()
+            self.is_evaluated = True
+        finally:
+            self.interpreter.env = previous_env
 
-        # print(f"LazyValue evaluated to: {self.cached_value.type()}, {self.cached_value.value()}")
+        # print(f"Cached LazyValue: {self.cached_value.type()}, {self.cached_value.value()}")
         return self.cached_value

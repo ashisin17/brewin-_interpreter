@@ -227,6 +227,14 @@ class Interpreter(InterpreterBase):
     def __eval_op(self, arith_ast):
         left_value_obj = self._eval_expr(arith_ast.get("op1"))
         right_value_obj = self._eval_expr(arith_ast.get("op2"))
+        
+        # handle lazy obj here
+        if isinstance(left_value_obj.value(), LazyValue):
+            left_value_obj = left_value_obj.value().evaluate()
+        if isinstance(right_value_obj.value(), LazyValue):
+            right_value_obj = right_value_obj.value().evaluate()
+            
+        # check for compatible types
         if not self.__compatible_types(
             arith_ast.elem_type, left_value_obj, right_value_obj
         ):
@@ -239,6 +247,7 @@ class Interpreter(InterpreterBase):
                 ErrorType.TYPE_ERROR,
                 f"Incompatible operator {arith_ast.elem_type} for type {left_value_obj.type()}",
             )
+        # perform the op
         f = self.op_to_lambda[left_value_obj.type()][arith_ast.elem_type]
         return f(left_value_obj, right_value_obj)
 

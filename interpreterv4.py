@@ -195,6 +195,7 @@ class Interpreter(InterpreterBase):
             if isinstance(val.value(), LazyValue):
                 return val.value().evaluate()
             return val
+        
         if expr_ast.elem_type == InterpreterBase.FCALL_NODE: # eager eval
             func_name = expr_ast.get("name")
             args = expr_ast.get("args")
@@ -204,6 +205,7 @@ class Interpreter(InterpreterBase):
                 return self.__call_func(expr_ast)  #eval asap
             # else, defer the evaluation!
             return Value(Type.NIL, LazyValue(expr_ast, self.env, self))
+        
         if expr_ast.elem_type in Interpreter.BIN_OPS: # update binary to handle lazy
             left = self.__eval_expr(expr_ast.get("op1"))
             right = self.__eval_expr(expr_ast.get("op2"))
@@ -212,8 +214,10 @@ class Interpreter(InterpreterBase):
             if isinstance(right.value(), LazyValue):
                 right = right.value().evaluate()
             return self.__eval_op(expr_ast, left, right)
-        if expr_ast.elem_type == Interpreter.NEG_NODE:
+        
+        if expr_ast.elem_type == Interpreter.NEG_NODE: #lazy eval for not and neg?
             return self.__eval_unary(expr_ast, Type.INT, lambda x: -1 * x)
+        
         if expr_ast.elem_type == Interpreter.NOT_NODE:
             return self.__eval_unary(expr_ast, Type.BOOL, lambda x: not x)
 

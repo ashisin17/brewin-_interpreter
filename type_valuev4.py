@@ -70,8 +70,12 @@ class LazyValue:
         self.is_evaluated = False
 
     def evaluate(self): # eval expr LAZILY if not alr done + Cache result
-        if not self.is_evaluated: # set up ennv for eval
+        if not self.is_evaluated: # temp switch to capture env for eval
+            previous_env = self.interpreter.env
             self.interpreter.env = self.environment
-            self.cached_value = copy(self.interpreter._Interpreter__eval_expr(self.expr_ast))
-            self.is_evaluated = True
+            try:
+                self.cached_value = self.interpreter.__eval_expr(self.expr_ast)
+                self.is_evaluated = True
+            finally: # restore prev env
+                self.interpreter.env = previous_env
         return self.cached_value

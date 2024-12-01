@@ -174,7 +174,8 @@ class Interpreter(InterpreterBase):
             )
 
     def __eval_expr(self, expr_ast):
-        if expr_ast.elem_type == InterpreterBase.NIL_NODE:
+        # simple literals nil, int, string, bool -> NOT affected
+        if expr_ast.elem_type == InterpreterBase.NIL_NODE: 
             return Interpreter.NIL_VALUE
         if expr_ast.elem_type == InterpreterBase.INT_NODE:
             return Value(Type.INT, expr_ast.get("val"))
@@ -182,6 +183,8 @@ class Interpreter(InterpreterBase):
             return Value(Type.STRING, expr_ast.get("val"))
         if expr_ast.elem_type == InterpreterBase.BOOL_NODE:
             return Value(Type.BOOL, expr_ast.get("val"))
+        
+        # lazy eval affected!
         if expr_ast.elem_type == InterpreterBase.VAR_NODE:
             var_name = expr_ast.get("name")
             val = self.env.get(var_name)
@@ -192,8 +195,15 @@ class Interpreter(InterpreterBase):
             if isinstance(val.value(), LazyValue):
                 return val.value().evaluate()
             return val
-        if expr_ast.elem_type == InterpreterBase.FCALL_NODE:
-            return self.__call_func(expr_ast)
+        if expr_ast.elem_type == InterpreterBase.FCALL_NODE: # eager eval
+            func_name = expr_ast.get("name")
+            args = expr_ast.get("args")
+            
+            # if eager context -> eval IMMEDIATELY!
+            if any(isinstance(self.env.get(arg_name).value(), LazyValue) for arg_name in args):
+                return self.__call_func(expr_ast)  #eval asap
+            # else, defer the evaluation!
+            return Value(Type.NIL, LazyValue(expr_ast, self.env, self))
         if expr_ast.elem_type in Interpreter.BIN_OPS: # update binary to handle lazy
             left = self.__eval_expr(expr_ast.get("op1"))
             right = self.__eval_expr(expr_ast.get("op2"))
@@ -343,6 +353,10 @@ class Interpreter(InterpreterBase):
         run_for = Interpreter.TRUE_VALUE
         while run_for.value():
             run_for = self.__eval_expr(cond_ast)  # check for-loop condition
+            #eager eval: conditional #1 FOR
+            if isinstance(run_for.value(), LazyValue):
+                run_for = run_for.value().evaluate()
+
             if run_for.type() != Type.BOOL:
                 super().error(
                     ErrorType.TYPE_ERROR,
@@ -361,7 +375,11 @@ class Interpreter(InterpreterBase):
         expr_ast = return_ast.get("expression")
         if expr_ast is None:
             return (ExecStatus.RETURN, Interpreter.NIL_VALUE)
+        
         value_obj = copy.copy(self.__eval_expr(expr_ast))
+        # lazy eval for return
+        if isinstance(value_obj.value(), LazyValue):
+            value_obj = value_obj.value().evaluate()
         return (ExecStatus.RETURN, value_obj)
     
     #TODO: do raise stuff once the node is built up

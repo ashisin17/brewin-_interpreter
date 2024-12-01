@@ -109,7 +109,7 @@ class Interpreter(InterpreterBase):
         # first evaluate all of the actual parameters and associate them with the formal parameter names
         args = {}
         for formal_ast, actual_ast in zip(formal_args, actual_args):
-            result = copy.copy(self.__eval_expr(actual_ast))
+            result = copy.copy(self._eval_expr(actual_ast))
             arg_name = formal_ast.get("name")
             args[arg_name] = result
 
@@ -125,7 +125,7 @@ class Interpreter(InterpreterBase):
     def __call_print(self, args):
         output = ""
         for arg in args:
-            result = self.__eval_expr(arg)  # result is a Value object
+            result = self._eval_expr(arg)  # result is a Value object
             # eager eval in specific #2: print as built iin
             if isinstance(result.value(), LazyValue):
                 result = result.value().evaluate()
@@ -136,7 +136,7 @@ class Interpreter(InterpreterBase):
 
     def __call_input(self, name, args): # eager eval #2: built in types
         if args is not None and len(args) == 1:
-            result = self.__eval_expr(args[0])
+            result = self._eval_expr(args[0])
             if isinstance(result.value(), LazyValue):
                 result = result.value().evaluate()
 
@@ -173,7 +173,7 @@ class Interpreter(InterpreterBase):
                 ErrorType.NAME_ERROR, f"Duplicate definition for variable {var_name}"
             )
 
-    def __eval_expr(self, expr_ast):
+    def _eval_expr(self, expr_ast):
         # simple literals nil, int, string, bool -> NOT affected
         if expr_ast.elem_type == InterpreterBase.NIL_NODE: 
             return Interpreter.NIL_VALUE
@@ -207,13 +207,13 @@ class Interpreter(InterpreterBase):
             return Value(Type.NIL, LazyValue(expr_ast, self.env, self))
         
         if expr_ast.elem_type in Interpreter.BIN_OPS: # update binary to handle lazy
-            left = self.__eval_expr(expr_ast.get("op1"))
-            right = self.__eval_expr(expr_ast.get("op2"))
+            left = self._eval_expr(expr_ast.get("op1"))
+            right = self._eval_expr(expr_ast.get("op2"))
             if isinstance(left.value(), LazyValue):
                 left = left.value().evaluate()
             if isinstance(right.value(), LazyValue):
                 right = right.value().evaluate()
-            return self.__eval_op(expr_ast, left, right)
+            return self.__eval_op(expr_ast)
         
         if expr_ast.elem_type == Interpreter.NEG_NODE: #lazy eval for not and neg?
             return self.__eval_unary(expr_ast, Type.INT, lambda x: -1 * x)
@@ -222,8 +222,8 @@ class Interpreter(InterpreterBase):
             return self.__eval_unary(expr_ast, Type.BOOL, lambda x: not x)
 
     def __eval_op(self, arith_ast):
-        left_value_obj = self.__eval_expr(arith_ast.get("op1"))
-        right_value_obj = self.__eval_expr(arith_ast.get("op2"))
+        left_value_obj = self._eval_expr(arith_ast.get("op1"))
+        right_value_obj = self._eval_expr(arith_ast.get("op2"))
         if not self.__compatible_types(
             arith_ast.elem_type, left_value_obj, right_value_obj
         ):
@@ -246,7 +246,7 @@ class Interpreter(InterpreterBase):
         return obj1.type() == obj2.type()
 
     def __eval_unary(self, arith_ast, t, f):
-        value_obj = self.__eval_expr(arith_ast.get("op1"))
+        value_obj = self._eval_expr(arith_ast.get("op1"))
         if value_obj.type() != t:
             super().error(
                 ErrorType.TYPE_ERROR,
@@ -325,7 +325,7 @@ class Interpreter(InterpreterBase):
 
     def __do_if(self, if_ast):
         cond_ast = if_ast.get("condition")
-        result = self.__eval_expr(cond_ast)
+        result = self._eval_expr(cond_ast)
 
         # eager eval: conditional #1
         if isinstance(result.value(), LazyValue):
@@ -356,7 +356,7 @@ class Interpreter(InterpreterBase):
         self.__run_statement(init_ast)  # initialize counter variable
         run_for = Interpreter.TRUE_VALUE
         while run_for.value():
-            run_for = self.__eval_expr(cond_ast)  # check for-loop condition
+            run_for = self._eval_expr(cond_ast)  # check for-loop condition
             #eager eval: conditional #1 FOR
             if isinstance(run_for.value(), LazyValue):
                 run_for = run_for.value().evaluate()
@@ -380,7 +380,7 @@ class Interpreter(InterpreterBase):
         if expr_ast is None:
             return (ExecStatus.RETURN, Interpreter.NIL_VALUE)
         
-        value_obj = copy.copy(self.__eval_expr(expr_ast))
+        value_obj = copy.copy(self._eval_expr(expr_ast))
         # lazy eval for return
         if isinstance(value_obj.value(), LazyValue):
             value_obj = value_obj.value().evaluate()
@@ -390,7 +390,7 @@ class Interpreter(InterpreterBase):
     """
     def __do_raise(self, raise_ast):
     exception_expr = raise_ast.get("exception_type")
-    exception_value = self.__eval_expr(exception_expr)
+    exception_value = self._eval_expr(exception_expr)
     # Eagerly evaluate LazyValues
     if isinstance(exception_value.value(), LazyValue):
         exception_value = exception_value.value().evaluate()

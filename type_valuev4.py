@@ -74,7 +74,7 @@ class LazyValue:
             previous_env = self.interpreter.env
             self.interpreter.env = self.environment
             try:
-                self.cached_value = self.interpreter.__eval_expr(self.expr_ast)
+                self.cached_value = self.interpreter._eval_expr(self.expr_ast)
                 self.is_evaluated = True
             finally: # restore prev env
                 self.interpreter.env = previous_env

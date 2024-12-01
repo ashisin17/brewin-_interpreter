@@ -109,9 +109,10 @@ class Interpreter(InterpreterBase):
         # first evaluate all of the actual parameters and associate them with the formal parameter names
         args = {}
         for formal_ast, actual_ast in zip(formal_args, actual_args):
-            result = copy.copy(self._eval_expr(actual_ast))
+            # result = copy.copy(self._eval_expr(actual_ast))
+            lazy_arg = LazyValue(actual_ast, self.env, self) # update args to have lazy eval
             arg_name = formal_ast.get("name")
-            args[arg_name] = result
+            args[arg_name] = Value(Type.NIL, lazy_arg)
 
         # then create the new activation record 
         self.env.push_func()
@@ -127,8 +128,8 @@ class Interpreter(InterpreterBase):
         for arg in args:
             result = self._eval_expr(arg)  # result is a Value object
             # eager eval in specific #2: print as built iin
-            if isinstance(result.value(), LazyValue):
-                result = result.value().evaluate()
+            if result.is_lazy():
+                result = result.evaluate()
             output += get_printable(result)
 
         super().output(output)
@@ -212,10 +213,12 @@ class Interpreter(InterpreterBase):
         if expr_ast.elem_type in Interpreter.BIN_OPS: # update binary to handle lazy
             left = self._eval_expr(expr_ast.get("op1"))
             right = self._eval_expr(expr_ast.get("op2"))
-            if isinstance(left.value(), LazyValue):
-                left = left.value().evaluate()
-            if isinstance(right.value(), LazyValue):
-                right = right.value().evaluate()
+
+            if left.is_lazy(): # update lazy logic
+                left = left.evaluate()
+            if right.is_lazy():
+                right = right.evaluate()
+                
             return self.__eval_op(expr_ast)
         
         if expr_ast.elem_type == Interpreter.NEG_NODE: #lazy eval for not and neg?

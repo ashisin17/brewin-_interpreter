@@ -79,7 +79,7 @@ class LazyValue:
 
         # use snap for eval
         previous_env = self.interpreter.env
-        self.interpreter.env = self.environment # switch to capture snap
+        self.interpreter.env = self.environment.snapshot() # switch to capture snap
         try:
             # Special handling for function calls
             if self.expr_ast.elem_type == InterpreterBase.FCALL_NODE:

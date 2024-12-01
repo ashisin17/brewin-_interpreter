@@ -6,7 +6,7 @@ from enum import Enum
 from brewparse import parse_program
 from env_v4 import EnvironmentManager
 from intbase import InterpreterBase, ErrorType
-from type_valuev4 import Type, Value, create_value, get_printable
+from type_valuev4 import Type, Value, LazyValue, create_value, get_printable
 
 
 class ExecStatus(Enum):
@@ -146,8 +146,10 @@ class Interpreter(InterpreterBase):
 
     def __assign(self, assign_ast):
         var_name = assign_ast.get("name")
-        value_obj = self.__eval_expr(assign_ast.get("expression"))
-        if not self.env.set(var_name, value_obj):
+        expr_ast = assign_ast.get("expression") # lazy eval -> dont eval yet, get expr
+
+        lazy_val = LazyValue(expr_ast, self)
+        if not self.env.set(var_name, lazy_val):
             super().error(
                 ErrorType.NAME_ERROR, f"Undefined variable {var_name} in assignment"
             )

@@ -1,5 +1,5 @@
 from intbase import InterpreterBase
-
+from copy import copy
 
 # Enumerated type for our different language data types
 class Type:
@@ -20,6 +20,14 @@ class Value:
 
     def type(self):
         return self.t
+    
+    def is_lazy(self):
+        return isinstance(self.v, LazyValue)
+    
+    def evaluate(self):
+        if self.is_lazy():
+            self.v = self.v.eval_lazy() # get lazy value
+        return self.v
 
 
 def create_value(val):
@@ -47,3 +55,23 @@ def get_printable(val):
             return "true"
         return "false"
     return None
+
+class LazyValue:
+    def __init__(self, expr_ast, environment, interpreter):
+        """
+        Class = wrapper to handle lazy logic
+        expr_ast = expr AST
+        envr = CURR envr where expr defined
+        """
+        self.expr_ast = expr_ast
+        self.environment = environment.snapshot()  # snapshot to capture envr
+        self.interpreter = interpreter
+        self.cached_value = None
+        self.is_evaluated = False
+
+    def eval_lazy(self): # eval expr LAZILY if not alr done + Cache result
+        if not self.is_evaluated: # set up ennv for eval
+            self.interpreter.env = self.environment
+            self.cached_value = copy(self.interpreter._Interpreter__eval_expr(self.expr_ast))
+            self.is_evaluated = True
+        return self.cached_value

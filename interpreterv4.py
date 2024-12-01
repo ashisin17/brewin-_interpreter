@@ -148,8 +148,8 @@ class Interpreter(InterpreterBase):
         var_name = assign_ast.get("name")
         expr_ast = assign_ast.get("expression") # lazy eval -> dont eval yet, get expr
 
-        lazy_val = LazyValue(expr_ast, self)
-        if not self.env.set(var_name, lazy_val):
+        lazy_val = LazyValue(expr_ast, self.env, self)
+        if not self.env.set(var_name, Value(Type.NIL, lazy_val)):
             super().error(
                 ErrorType.NAME_ERROR, f"Undefined variable {var_name} in assignment"
             )
@@ -175,11 +175,21 @@ class Interpreter(InterpreterBase):
             val = self.env.get(var_name)
             if val is None:
                 super().error(ErrorType.NAME_ERROR, f"Variable {var_name} not found")
+            
+            # handle lazy eval
+            if isinstance(val.value(), LazyValue):
+                return val.value().evaluate()
             return val
         if expr_ast.elem_type == InterpreterBase.FCALL_NODE:
             return self.__call_func(expr_ast)
-        if expr_ast.elem_type in Interpreter.BIN_OPS:
-            return self.__eval_op(expr_ast)
+        if expr_ast.elem_type in Interpreter.BIN_OPS: # update binary to handle lazy
+            left = self.__eval_expr(expr_ast.get("op1"))
+            right = self.__eval_expr(expr_ast.get("op2"))
+            if isinstance(left.value(), LazyValue):
+                left = left.value().evaluate()
+            if isinstance(right.value(), LazyValue):
+                right = right.value().evaluate()
+            return self.__eval_op(expr_ast, left, right)
         if expr_ast.elem_type == Interpreter.NEG_NODE:
             return self.__eval_unary(expr_ast, Type.INT, lambda x: -1 * x)
         if expr_ast.elem_type == Interpreter.NOT_NODE:

@@ -26,7 +26,7 @@ class Value:
     
     def evaluate(self):
         if self.is_lazy():
-            self.v = self.v.eval_lazy() # get lazy value
+            self.v = self.v.evaluate() # get lazy value
         return self.v
 
 
@@ -69,7 +69,7 @@ class LazyValue:
         self.cached_value = None
         self.is_evaluated = False
 
-    def eval_lazy(self): # eval expr LAZILY if not alr done + Cache result
+    def evaluate(self): # eval expr LAZILY if not alr done + Cache result
         if not self.is_evaluated: # set up ennv for eval
             self.interpreter.env = self.environment
             self.cached_value = copy(self.interpreter._Interpreter__eval_expr(self.expr_ast))

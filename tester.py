@@ -1,9 +1,13 @@
 from interpreterv4 import Interpreter # this may vary
 
 program = """
-func main(): void {
-    var x: int;
-    print(x == nil);
+func main() {
+  var result;
+  var x;
+  x = 3;
+  result = x + 10;
+  x = 4;
+  print(result);  
 }
 """
 

@@ -126,19 +126,31 @@ class Interpreter(InterpreterBase):
         output = ""
         for arg in args:
             result = self.__eval_expr(arg)  # result is a Value object
-            output = output + get_printable(result)
+            # eager eval in specific #2: print as built iin
+            if isinstance(result.value(), LazyValue):
+                result = result.value().evaluate()
+            output += get_printable(result)
+
         super().output(output)
         return Interpreter.NIL_VALUE
 
-    def __call_input(self, name, args):
+    def __call_input(self, name, args): # eager eval #2: built in types
         if args is not None and len(args) == 1:
             result = self.__eval_expr(args[0])
-            super().output(get_printable(result))
+            if isinstance(result.value(), LazyValue):
+                result = result.value().evaluate()
+
+            if result.type() != Type.STRING:
+                super().error(ErrorType.TYPE_ERROR, "input function argument must be a string")
+
         elif args is not None and len(args) > 1:
             super().error(
                 ErrorType.NAME_ERROR, "No inputi() function that takes > 1 parameter"
             )
+
+        super().output(get_printable(result))
         inp = super().get_input()
+
         if name == "inputi":
             return Value(Type.INT, int(inp))
         if name == "inputs":
@@ -300,6 +312,11 @@ class Interpreter(InterpreterBase):
     def __do_if(self, if_ast):
         cond_ast = if_ast.get("condition")
         result = self.__eval_expr(cond_ast)
+
+        # eager eval: conditional #1
+        if isinstance(result.value(), LazyValue):
+            result = result.value().evaluate()
+
         if result.type() != Type.BOOL:
             super().error(
                 ErrorType.TYPE_ERROR,
@@ -346,3 +363,16 @@ class Interpreter(InterpreterBase):
             return (ExecStatus.RETURN, Interpreter.NIL_VALUE)
         value_obj = copy.copy(self.__eval_expr(expr_ast))
         return (ExecStatus.RETURN, value_obj)
+    
+    #TODO: do raise stuff once the node is built up
+    """
+    def __do_raise(self, raise_ast):
+    exception_expr = raise_ast.get("exception_type")
+    exception_value = self.__eval_expr(exception_expr)
+    # Eagerly evaluate LazyValues
+    if isinstance(exception_value.value(), LazyValue):
+        exception_value = exception_value.value().evaluate()
+    if exception_value.type() != Type.STRING:
+        super().error(ErrorType.TYPE_ERROR, "Exception must be a string")
+    raise BrewinException(exception_value.value())
+    """

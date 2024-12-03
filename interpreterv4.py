@@ -26,6 +26,7 @@ class Interpreter(InterpreterBase):
         super().__init__(console_output, inp)
         self.trace_output = trace_output
         self.__setup_ops()
+        self.expression_cache = {} # expression cache!
 
     # run a program that's provided in a string
     # usese the provided Parser found in brewparse.py to parse the program
@@ -58,6 +59,7 @@ class Interpreter(InterpreterBase):
 
     def __run_statements(self, statements):
         self.env.push_block()
+        # self.expression_cache.clear() # clear cache when entering a new block
         for statement in statements:
             if self.trace_output:
                 print(statement)
@@ -110,7 +112,7 @@ class Interpreter(InterpreterBase):
         args = {}
         for formal_ast, actual_ast in zip(formal_args, actual_args):
             # result = copy.copy(self._eval_expr(actual_ast))
-            lazy_arg = LazyValue(actual_ast, self.env, self) # update args to have lazy eval
+            lazy_arg = LazyValue(actual_ast, self.env.snapshot(), self) # update args to have lazy eval
             arg_name = formal_ast.get("name")
             args[arg_name] = Value(Type.NIL, lazy_arg)
 
@@ -121,6 +123,11 @@ class Interpreter(InterpreterBase):
           self.env.create(arg_name, value)
         _, return_val = self.__run_statements(func_ast.get("statements"))
         self.env.pop_func()
+
+        # validate return type for lazy value!
+        if return_val.type() == Type.NIL and isinstance(return_val.value(), LazyValue):
+            # print(f"DEBUG: Function {func_name} returned a LazyValue. Evaluating...")
+            return_val = return_val.value().evaluate()
         return return_val
 
     def __call_print(self, args):
@@ -128,8 +135,8 @@ class Interpreter(InterpreterBase):
         for arg in args:
             result = self._eval_expr(arg)  # result is a Value object
             # eager eval in specific #2: print as built iin
-            if result.is_lazy():
-                result = result.evaluate()
+            if isinstance(result.value(), LazyValue):
+                result = result.value().evaluate()
             output += get_printable(result)
 
         super().output(output)
@@ -161,8 +168,19 @@ class Interpreter(InterpreterBase):
         var_name = assign_ast.get("name")
         expr_ast = assign_ast.get("expression") # lazy eval -> dont eval yet, get expr
 
-        lazy_val = LazyValue(expr_ast, self.env, self)
-        if not self.env.set(var_name, Value(Type.NIL, lazy_val)):
+        evaluated_value = self._eval_expr(expr_ast)
+        if evaluated_value.is_lazy():
+            # print(f"DEBUG: Evaluating lazy value for assignment to {var_name}")
+            evaluated_value = evaluated_value.evaluate()
+
+        # Invalidate cache entries involving this variable
+        # print(f"DEBUG:ASSIGN! Clearing cache entries for variable {var_name}")
+        keys_invalidate = [k for k in self.expression_cache if f"var: name: {var_name}" in str(k)]
+        for key in keys_invalidate:
+            # print(f"DEBUG: Invalidating cache for {key}")
+            del self.expression_cache[key]
+
+        if not self.env.set(var_name, evaluated_value):
             super().error(
                 ErrorType.NAME_ERROR, f"Undefined variable {var_name} in assignment"
             )
@@ -175,6 +193,47 @@ class Interpreter(InterpreterBase):
             )
 
     def _eval_expr(self, expr_ast):
+        # generate unique KEY for each expression
+        if expr_ast.elem_type == InterpreterBase.FCALL_NODE:
+            func_name = expr_ast.get("name")
+            args = tuple(str(arg) for arg in expr_ast.get("args"))  # use args as cache key
+            expr_key = ("fcall", func_name, args)
+        else:
+            expr_key = str(expr_ast) # for expr, use string expr
+        
+        # print(f"DEBUG: Current cache keys: {list(self.expression_cache.keys())}")
+        # print(f"DEBUG: Checking for expr_key: {expr_key}")
+
+        # if value or expr already cached, return that!
+        if expr_key in self.expression_cache: 
+            # print(f"DEBUG: RETURN cached val for eval expr -> Using cached LazyValue for {expr_key}")
+            cached_value = self.expression_cache[expr_key]
+
+            if cached_value.is_lazy(): # lazyval inside cached val is EVAL!
+                # print(f"DEBUG: Evaluating cached LazyValue for {expr_key}")
+                cached_value = cached_value.evaluate()
+                self.expression_cache[expr_key] = cached_value
+            
+            if cached_value.type() == Type.NIL:
+                # print(f"DEBUG: Cached value is NIL for {expr_key}. Reevaluating...")
+                cached_value = cached_value.evaluate()
+                self.expression_cache[expr_key] = cached_value  # Update the cache
+                if cached_value.type() == Type.NIL:  # Still NIL after reevaluation
+                    super().error(
+                        ErrorType.TYPE_ERROR,
+                        f"Cached LazyValue resulted in NIL after reevaluation: {expr_key}"
+                    )
+
+            return cached_value
+        
+        if expr_ast.elem_type == InterpreterBase.FCALL_NODE: # eager eval
+            # print(f"DEBUG: INSIDE FCALL for eval expr -> Creating new LazyValue for {expr_key}")
+            lazy_val = LazyValue(expr_ast, self.env, self)
+
+            evaluated_value = Value(Type.NIL, lazy_val) # imm eval and cache result
+            self.expression_cache[expr_key] = evaluated_value
+            return evaluated_value
+
         # simple literals nil, int, string, bool -> NOT affected
         if expr_ast.elem_type == InterpreterBase.NIL_NODE: 
             return Interpreter.NIL_VALUE
@@ -197,28 +256,7 @@ class Interpreter(InterpreterBase):
                 return val.value().evaluate()
             return val
         
-        if expr_ast.elem_type == InterpreterBase.FCALL_NODE: # eager eval
-            func_name = expr_ast.get("name")
-            args = expr_ast.get("args")
-            
-            # if eager context -> eval IMMEDIATELY!
-            if any( # check if args are eager
-                self.env.get(arg_name) is not None and isinstance(self.env.get(arg_name).value(), LazyValue)
-                for arg_name in args
-            ):
-                return self._call_func(expr_ast)
-            # else, defer the evaluation!
-            return Value(Type.NIL, LazyValue(expr_ast, self.env, self))
-        
-        if expr_ast.elem_type in Interpreter.BIN_OPS: # update binary to handle lazy
-            left = self._eval_expr(expr_ast.get("op1"))
-            right = self._eval_expr(expr_ast.get("op2"))
-
-            if left.is_lazy(): # update lazy logic
-                left = left.evaluate()
-            if right.is_lazy():
-                right = right.evaluate()
-                
+        if expr_ast.elem_type in Interpreter.BIN_OPS: # update binary-> eval op to handle lazy                
             return self.__eval_op(expr_ast)
         
         if expr_ast.elem_type == Interpreter.NEG_NODE: #lazy eval for not and neg?
@@ -230,12 +268,26 @@ class Interpreter(InterpreterBase):
     def __eval_op(self, arith_ast):
         left_value_obj = self._eval_expr(arith_ast.get("op1"))
         right_value_obj = self._eval_expr(arith_ast.get("op2"))
-        
+
+        # print(f"DEBUG: EVAL OP for: {arith_ast.elem_type}")
+        # print("BEFORE lazy eval in eval op")
+        # print(f"DEBUG: Left operand: {left_value_obj.type()}, {left_value_obj.value()}")
+        # print(f"DEBUG: Right operand: {right_value_obj.type()}, {right_value_obj.value()}")
         # handle lazy obj here
-        if isinstance(left_value_obj.value(), LazyValue):
+        if isinstance(left_value_obj.value(), LazyValue): # handle nested valueS!
             left_value_obj = left_value_obj.value().evaluate()
         if isinstance(right_value_obj.value(), LazyValue):
             right_value_obj = right_value_obj.value().evaluate()
+
+        if left_value_obj.type() == Type.NIL or right_value_obj.type() == Type.NIL:
+            super().error(
+                ErrorType.TYPE_ERROR,
+                f"Invalid operand for {arith_ast.elem_type} operation: Left({left_value_obj.type()}), Right({right_value_obj.type()})"
+            )
+
+        # print("AFTER lazy eval in eval op")
+        # print(f"DEBUG: Left operand: {left_value_obj.type()}, {left_value_obj.value()}")
+        # print(f"DEBUG: Right operand: {right_value_obj.type()}, {right_value_obj.value()}")
             
         # check for compatible types
         if not self.__compatible_types(
@@ -252,7 +304,10 @@ class Interpreter(InterpreterBase):
             )
         # perform the op
         f = self.op_to_lambda[left_value_obj.type()][arith_ast.elem_type]
-        return f(left_value_obj, right_value_obj)
+        result = f(left_value_obj, right_value_obj)
+
+        # cache result for future reuse
+        return Value(result.type(), result.value())
 
     def __compatible_types(self, oper, obj1, obj2):
         # DOCUMENT: allow comparisons ==/!= of anything against anything
@@ -349,8 +404,8 @@ class Interpreter(InterpreterBase):
         result = self._eval_expr(cond_ast)
 
         # eager eval: conditional #1
-        if isinstance(result.value(), LazyValue):
-            result = result.value().evaluate()
+        if result.is_lazy():
+            result = result.evaluate()
 
         if result.type() != Type.BOOL:
             super().error(
@@ -375,21 +430,28 @@ class Interpreter(InterpreterBase):
         update_ast = for_ast.get("update") 
 
         self.__run_statement(init_ast)  # initialize counter variable
-        run_for = Interpreter.TRUE_VALUE
-        while run_for.value():
-            run_for = self._eval_expr(cond_ast)  # check for-loop condition
+
+        # run_for = Interpreter.TRUE_VALUE
+        while True:
+            run_for = self._eval_expr(cond_ast)  # check for-loop condition ONCE
+
             #eager eval: conditional #1 FOR
-            if isinstance(run_for.value(), LazyValue):
-                run_for = run_for.value().evaluate()
+            if run_for.is_lazy():
+                run_for = run_for.evaluate()
 
             if run_for.type() != Type.BOOL:
                 super().error(
                     ErrorType.TYPE_ERROR,
                     "Incompatible type for for condition",
                 )
+            
+            if not run_for.value(): # exit loop when condition is false
+                break
+
             if run_for.value():
                 statements = for_ast.get("statements")
                 status, return_val = self.__run_statements(statements)
+
                 if status == ExecStatus.RETURN:
                     return status, return_val
                 self.__run_statement(update_ast)  # update counter variable

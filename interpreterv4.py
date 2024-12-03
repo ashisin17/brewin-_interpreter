@@ -168,19 +168,22 @@ class Interpreter(InterpreterBase):
         var_name = assign_ast.get("name")
         expr_ast = assign_ast.get("expression") # lazy eval -> dont eval yet, get expr
 
-        evaluated_value = self._eval_expr(expr_ast)
-        if evaluated_value.is_lazy():
-            # print(f"DEBUG: Evaluating lazy value for assignment to {var_name}")
-            evaluated_value = evaluated_value.evaluate()
+        # evaluated_value = self._eval_expr(expr_ast)
+        # if evaluated_value.is_lazy():
+        #     # print(f"DEBUG: Evaluating lazy value for assignment to {var_name}")
+        #     evaluated_value = evaluated_value.evaluate()
 
-        # Invalidate cache entries involving this variable
-        # print(f"DEBUG:ASSIGN! Clearing cache entries for variable {var_name}")
-        keys_invalidate = [k for k in self.expression_cache if f"var: name: {var_name}" in str(k)]
-        for key in keys_invalidate:
-            # print(f"DEBUG: Invalidating cache for {key}")
-            del self.expression_cache[key]
+        # # Invalidate cache entries involving this variable
+        # # print(f"DEBUG:ASSIGN! Clearing cache entries for variable {var_name}")
+        # keys_invalidate = [k for k in self.expression_cache if f"var: name: {var_name}" in str(k)]
+        # for key in keys_invalidate:
+        #     # print(f"DEBUG: Invalidating cache for {key}")
+        #     del self.expression_cache[key]
 
-        if not self.env.set(var_name, evaluated_value):
+        lazy_value = LazyValue(expr_ast, self.env.snapshot(), self)
+        value_obj = Value(Type.NIL, lazy_value)
+
+        if not self.env.set(var_name, value_obj):
             super().error(
                 ErrorType.NAME_ERROR, f"Undefined variable {var_name} in assignment"
             )

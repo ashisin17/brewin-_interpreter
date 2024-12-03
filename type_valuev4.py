@@ -72,11 +72,11 @@ class LazyValue:
 
     def evaluate(self): # eval expr LAZILY if not alr done + Cache result
         if self.is_evaluated: # if alr eval, return it
-            # print(f"DEBUG: Using cached value for {self.expr_ast}")
+            # print(f"DEBUG: LAZYVAL eval -> Using cached value for {self.expr_ast}")
             return self.cached_value
         
         # case for NOT cached valye
-        # print(f"DEBUG: Evaluating LazyValue: {self.expr_ast}")
+        # print(f"DEBUG: LAZYVAL eval -> Evaluating LazyValue: {self.expr_ast}")
 
         # use snap for eval
         previous_env = self.interpreter.env
@@ -89,6 +89,11 @@ class LazyValue:
                 self.cached_value = self.interpreter._eval_expr(self.expr_ast)
                 # if isinstance(self.cached_value.value(), LazyValue):
                 #     self.cached_value = self.cached_value.value().evaluate()
+                # if self.cached_value.type() == Type.NIL:
+                #     raise Exception("LazyValue evaluation resulted in NIL unexpectedly")
+            
+            # print(f"DEBUG: LAZYVAL eval -> Evaluated LazyValue result: {self.cached_value}")
+
             self.is_evaluated = True
             self.interpreter.expression_cache[str(self.expr_ast)] = self.cached_value
         finally:

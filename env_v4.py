@@ -12,11 +12,14 @@ class EnvironmentManager:
         for env in reversed(cur_func_env):
             if symbol in env:
                 value_obj = env[symbol]
+                # print(f"DEBUG: Accessing variable {symbol}, value: {value_obj}")
                 if value_obj.is_lazy():
-                    value_obj = value_obj.evaluate()
-                    env[symbol] = value_obj
-                # print(f"DEBUG: Accessing variable {symbol}, value: {env[symbol]}")
-                return env[symbol]
+                    # print(f"DEBUG: Resolving lazy value for variable {symbol}")
+                    lazy_resolved = value_obj.evaluate()
+                    env[symbol] = lazy_resolved
+                    # print(f"DEBUG: Updated variable {symbol} with resolved value: {lazy_resolved}")
+                    return lazy_resolved
+                return value_obj
 
         return None
 
@@ -59,10 +62,10 @@ class EnvironmentManager:
         # create SHALLOW copy with the obj ref!
         snapshot_env = []
         for func_env in self.environment:
-            snapshot_func_env = [{key: value for key, value in block.items()} for block in func_env]  # shallow copy each fuc block + shared stuff
+            snapshot_func_env = [{key: value for key, value in block.items()} for block in func_env]
             snapshot_env.append(snapshot_func_env)
 
-        snapshot_manager = EnvironmentManager() # shallow copied structure!
+        snapshot_manager = EnvironmentManager()
         snapshot_manager.environment = snapshot_env
         return snapshot_manager
 

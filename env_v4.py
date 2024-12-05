@@ -46,3 +46,9 @@ class EnvironmentManager:
     # used when we exit a nested block to discard the environment for that block
     def pop_func(self):
         self.environment.pop()
+
+    def snapshot(self): # create a 2 layer shallow copy of env
+        return [
+            [{k: v for k, v in env.items()} for env in func_env]
+            for func_env in self.environment
+        ]

@@ -9,6 +9,25 @@ from env_v4 import EnvironmentManager
 from intbase import InterpreterBase, ErrorType
 from type_valuev4 import Type, Value, create_value, get_printable
 
+"""
+WRAPPER class to save the lazy value -> putting it in the same file as the interpreter 
+so no issues with calling it!
+"""
+class LazyValue: 
+    def __init__(self, expr_ast, env_snapshot): # no need to pass in interpreter
+        self.expr_ast = expr_ast # closure implemenaation -> save the expresison ast
+        self.cached_value = None
+        self.evaluated = False
+        self.env_snapshot = env_snapshot  # envr snapshot
+
+    def evaluate(self, interpreter):
+        if not self.evaluated:
+            original_env = interpreter.env.environment  # save curr env
+            interpreter.env.environment = self.env_snapshot  # REPLACE envr
+            self.cached_value = interpreter.__eval_expr(self.expr_ast)  # eval LAZY expr
+            self.evaluated = True
+            interpreter.env.environment = original_env  # Restore original environment
+        return self.value
 
 class ExecStatus(Enum):
     CONTINUE = 1
@@ -148,7 +167,12 @@ class Interpreter(InterpreterBase):
     def __assign(self, assign_ast):
         var_name = assign_ast.get("name")
         value_obj = self.__eval_expr(assign_ast.get("expression"))
-        if not self.env.set(var_name, value_obj):
+
+        # hand lazy evaluation
+        env_snapshot = self.env.snapshot()
+        lazy = LazyValue(value_obj, env_snapshot)
+
+        if not self.env.set(var_name, lazy): # set it to NOW refernece a lazy expr ast
             super().error(
                 ErrorType.NAME_ERROR, f"Undefined variable {var_name} in assignment"
             )
@@ -161,6 +185,8 @@ class Interpreter(InterpreterBase):
             )
 
     def __eval_expr(self, expr_ast):
+        if isinstance(expr_ast, LazyValue): # handle lazy eval
+            return expr_ast.evaluate(self)
         if expr_ast.elem_type == InterpreterBase.NIL_NODE:
             return Interpreter.NIL_VALUE
         if expr_ast.elem_type == InterpreterBase.INT_NODE:

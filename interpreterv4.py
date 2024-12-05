@@ -21,7 +21,11 @@ class LazyValue:
         self.env_snapshot = env_snapshot  # envr snapshot
 
     def evaluate(self, interpreter):
+        if self.evaluated:
+            return self.cached_value
         if not self.evaluated:
+            if isinstance(self.expr_ast, Value): # if it is a val obj -> just return it!
+                self.cached_value = self.expr_ast
             original_env = interpreter.env.environment  # save curr env
             interpreter.env.environment = self.env_snapshot  # REPLACE envr
             self.cached_value = interpreter._eval_expr(self.expr_ast)  # eval LAZY expr
@@ -177,14 +181,15 @@ class Interpreter(InterpreterBase):
         var_name = assign_ast.get("name")
         value_obj = self._eval_expr(assign_ast.get("expression"))
 
-        # hand lazy evaluation
-        env_snapshot = self.env.snapshot()
-        lazy = LazyValue(value_obj, env_snapshot)
-
-        if not self.env.set(var_name, lazy): # set it to NOW refernece a lazy expr ast
-            super().error(
-                ErrorType.NAME_ERROR, f"Undefined variable {var_name} in assignment"
-            )
+        if isinstance(value_obj, Value): # direc assign the val
+            # Directly assign the evaluated Value object
+            value_obj = value_obj
+        else: # eval lazily
+            env_snapshot = self.env.snapshot()
+            value_obj = LazyValue(value_obj, env_snapshot)
+        
+        if not self.env.set(var_name, value_obj):
+            super().error(ErrorType.NAME_ERROR, f"Undefined variable {var_name} in assignment")
     
     def __var_def(self, var_ast):
         var_name = var_ast.get("name")

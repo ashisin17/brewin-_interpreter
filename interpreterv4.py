@@ -132,6 +132,9 @@ class Interpreter(InterpreterBase):
             result = copy.copy(self.__eval_expr(actual_ast))
             arg_name = formal_ast.get("name")
             args[arg_name] = result
+            # Should we do lazy eval for args?
+            # env_snapshot = self.env.snapshot()
+            # args[formal_ast.get("name")] = LazyValue(actual_ast, env_snapshot)
 
         # then create the new activation record 
         self.env.push_func()
@@ -146,6 +149,9 @@ class Interpreter(InterpreterBase):
         output = ""
         for arg in args:
             result = self.__eval_expr(arg)  # result is a Value object
+            # resolve ANY lazy val here!
+            if isinstance(result, LazyValue):
+                result = result.evaluate(self)
             output = output + get_printable(result)
         super().output(output)
         return Interpreter.NIL_VALUE
@@ -153,6 +159,9 @@ class Interpreter(InterpreterBase):
     def __call_input(self, name, args):
         if args is not None and len(args) == 1:
             result = self.__eval_expr(args[0])
+            # eager eval for input funcs
+            if isinstance(result, LazyValue):
+                result = result.get_value(self)
             super().output(get_printable(result))
         elif args is not None and len(args) > 1:
             super().error(
@@ -315,6 +324,11 @@ class Interpreter(InterpreterBase):
     def __do_if(self, if_ast):
         cond_ast = if_ast.get("condition")
         result = self.__eval_expr(cond_ast)
+
+        # eager EVAL: IF
+        if isinstance(result, LazyValue): # if lazy, eval ASAP!
+            result = result.evaluate(self)
+
         if result.type() != Type.BOOL:
             super().error(
                 ErrorType.TYPE_ERROR,
@@ -341,6 +355,11 @@ class Interpreter(InterpreterBase):
         run_for = Interpreter.TRUE_VALUE
         while run_for.value():
             run_for = self.__eval_expr(cond_ast)  # check for-loop condition
+
+            # eager EVAL: for
+            if isinstance(run_for, LazyValue):
+                run_for = run_for.get_value(self)
+
             if run_for.type() != Type.BOOL:
                 super().error(
                     ErrorType.TYPE_ERROR,

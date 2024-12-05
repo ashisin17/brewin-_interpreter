@@ -1,15 +1,17 @@
 from interpreterv4 import Interpreter # this may vary
 
 program = """
-func main() {
- var b;
- b = 5;
-var a;
-a = b + 1;  
-b = 10;
-print(a);
+func bar(x) {
+ print("bar: ", x);
+ return x;
 }
 
+func main() {
+ var a;
+ a = -bar(1);
+ print("---");
+ print(a);
+}
 """
 
 interpreter = Interpreter()

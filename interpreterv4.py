@@ -194,30 +194,20 @@ class Interpreter(InterpreterBase):
 
         # ________________
         #APPROAHCh 3
-        #1. check for existing lazy value
-        existing_value = self.env.get(var_name)
-        if existing_value:
-            print(f"DETECTED existing value for {var_name}")
-            if isinstance(existing_value.value(), LazyValue):
-                # Handle LazyValue without evaluating it unless in eager context
-                print(f"LazyValue detected for {var_name}, but NOT resolving during assignment -> goes to eval expr")
-
-        # 2. NO existing -> so create a lazy value for the assignment [every time new assignment, do this bc new obj reference]
+        # create LazyValue for the assignment
         lazy_value = LazyValue(expr_ast, self.env.snapshot(), self)
-        print(f"CREATE: NEW value for {var_name} in ASSIGN")
-        value_obj = Value(Type.NIL, lazy_value) # placeholder of nil unless eval!
+        value_obj = Value(Type.NIL, lazy_value)
 
         # Invalidate cache entries involving this variable
         # RECURSIVELY also invalidate expr DEP on that vraible?!
-        self.__invalidate_cache(var_name)
-
+        # self.__invalidate_cache(var_name) # TODO: need this?
 
         if not self.env.set(var_name, value_obj):
             super().error(
                 ErrorType.NAME_ERROR, f"Undefined variable {var_name} in assignment"
             )
     
-        print(f"DEBUG: Assigned {var_name} with lazy expression {expr_ast}")    
+        # print(f"DEBUG: Assigned {var_name} with lazy expression {expr_ast}")    
 
     def __invalidate_cache(self, var_name):
         def __extract_dependent_variable(expr_key): # parse expr key to find var
@@ -250,46 +240,47 @@ class Interpreter(InterpreterBase):
     def _eval_expr(self, expr_ast):
         # print(f"DEBUG: Evaluating expression {expr_ast}")
 
-        # generate unique KEY for each expression
-        if expr_ast.elem_type == InterpreterBase.FCALL_NODE:
-            func_name = expr_ast.get("name")
-            args = tuple(str(arg) for arg in expr_ast.get("args"))  # use args as cache key
-            expr_key = ("fcall", func_name, args)
-        else:
-            expr_key = str(expr_ast) # for expr, use string expr
+        # # generate unique KEY for each expression
+        # if expr_ast.elem_type == InterpreterBase.FCALL_NODE:
+        #     func_name = expr_ast.get("name")
+        #     args = tuple(str(arg) for arg in expr_ast.get("args"))  # use args as cache key
+        #     expr_key = ("fcall", func_name, args)
+        # else:
+        #     expr_key = str(expr_ast) # for expr, use string expr
         
-        # print(f"DEBUG: Current cache keys: {list(self.expression_cache.keys())}")
-        # print(f"DEBUG: Checking for expr_key: {expr_key}")
+        # # print(f"DEBUG: Current cache keys: {list(self.expression_cache.keys())}")
+        # # print(f"DEBUG: Checking for expr_key: {expr_key}")
 
-        # if value or expr already cached, return that!
-        if expr_key in self.expression_cache: 
-            # print(f"DEBUG: RETURN cached val for eval expr -> Using cached LazyValue for {expr_key}")
-            cached_value = self.expression_cache[expr_key]
+        # # if value or expr already cached, return that!
+        # if expr_key in self.expression_cache: 
+        #     # print(f"DEBUG: RETURN cached val for eval expr -> Using cached LazyValue for {expr_key}")
+        #     cached_value = self.expression_cache[expr_key]
 
-            if cached_value.is_lazy(): # lazyval inside cached val is EVAL!
-                # print(f"DEBUG: Evaluating cached LazyValue for {expr_key}")
-                cached_value = cached_value.evaluate()
-                self.expression_cache[expr_key] = cached_value
+        #     if cached_value.is_lazy(): # lazyval inside cached val is EVAL!
+        #         # print(f"DEBUG: Evaluating cached LazyValue for {expr_key}")
+        #         cached_value = cached_value.evaluate()
+        #         self.expression_cache[expr_key] = cached_value
             
-            if cached_value.type() == Type.NIL:
-                # print(f"DEBUG: Cached value is NIL for {expr_key}. Reevaluating...")
-                del self.expression_cache[expr_key]  # Invalidate cache entry
-                cached_value = self._eval_expr(expr_ast)  # Re-evaluate the expression
-                if cached_value.type() == Type.NIL:  # Still NIL after reevaluation
-                    super().error(
-                        ErrorType.TYPE_ERROR,
-                        f"Cached LazyValue resulted in NIL after reevaluation: {expr_key}"
-                    )
+        #     if cached_value.type() == Type.NIL:
+        #         # print(f"DEBUG: Cached value is NIL for {expr_key}. Reevaluating...")
+        #         del self.expression_cache[expr_key]  # Invalidate cache entry
+        #         cached_value = self._eval_expr(expr_ast)  # Re-evaluate the expression
+        #         if cached_value.type() == Type.NIL:  # Still NIL after reevaluation
+        #             super().error(
+        #                 ErrorType.TYPE_ERROR,
+        #                 f"Cached LazyValue resulted in NIL after reevaluation: {expr_key}"
+        #             )
 
-            return cached_value
+        #     return cached_value
         
         if expr_ast.elem_type == InterpreterBase.FCALL_NODE: # eager eval
             # print(f"DEBUG: INSIDE FCALL for eval expr -> Creating new LazyValue for {expr_key}")
-            lazy_val = LazyValue(expr_ast, self.env, self)
+            # lazy_val = LazyValue(expr_ast, self.env, self)
 
-            evaluated_value = Value(Type.NIL, lazy_val) # imm eval and cache result
-            self.expression_cache[expr_key] = evaluated_value
-            return evaluated_value
+            # evaluated_value = Value(Type.NIL, lazy_val) # imm eval and cache result
+            # self.expression_cache[expr_key] = evaluated_value
+            # return evaluated_value
+            return LazyValue(expr_ast, self.env.snapshot(), self)
 
         # simple literals nil, int, string, bool -> NOT affected
         if expr_ast.elem_type == InterpreterBase.NIL_NODE: 
@@ -314,9 +305,7 @@ class Interpreter(InterpreterBase):
             if isinstance(val.value(), LazyValue):
                 # return val.value().evaluate()
                 # print(f"DEBUG: EVAL EXPR-> VAR NODE Evaluating LazyValue for variable {var_name}")
-                evaluated_value = val.value().evaluate()
-                self.env.set(var_name, evaluated_value) # update envr with evaluated result
-                return evaluated_value
+                return val.value().evaluate()
             return val
         
         if expr_ast.elem_type in Interpreter.BIN_OPS: # update binary-> eval op to handle lazy                
@@ -332,10 +321,10 @@ class Interpreter(InterpreterBase):
         left_value_obj = self._eval_expr(arith_ast.get("op1"))
         right_value_obj = self._eval_expr(arith_ast.get("op2"))
 
-        print(f"DEBUG: EVAL OP for: {arith_ast.elem_type}")
-        print("BEFORE lazy eval in eval op")
-        print(f"DEBUG: Left operand: {left_value_obj}, {left_value_obj.type()}, {left_value_obj.value()}")
-        print(f"DEBUG: Right operand: {right_value_obj}, {right_value_obj.type()}, {right_value_obj.value()}")
+        # print(f"DEBUG: EVAL OP for: {arith_ast.elem_type}")
+        # print("BEFORE lazy eval in eval op")
+        # print(f"DEBUG: Left operand: {left_value_obj}, {left_value_obj.type()}, {left_value_obj.value()}")
+        # print(f"DEBUG: Right operand: {right_value_obj}, {right_value_obj.type()}, {right_value_obj.value()}")
 
         # handle lazy obj here
         if isinstance(left_value_obj.value(), LazyValue):
@@ -377,10 +366,12 @@ class Interpreter(InterpreterBase):
     def __eval_unary(self, arith_ast, t, f):
         value_obj = self._eval_expr(arith_ast.get("op1"))
 
-        if isinstance(value_obj.value(), LazyValue): # if its lazy eval it
-            value_obj = value_obj.value().evaluate()
+        if isinstance(value_obj, LazyValue): # if its lazy eval it
+            value_obj = value_obj.evaluate()
         
         # print(f"Unary operation operand type: {value_obj.type()}, value: {value_obj.value()}")
+        if not isinstance(value_obj, Value): # after calling eval, it should resolve into a value type
+            super().error(ErrorType.TYPE_ERROR, f"Unexpected type: {type(value_obj)}")
 
         if value_obj.type() != t:
             super().error(

@@ -11,7 +11,7 @@ class EnvironmentManager:
         cur_func_env = self.environment[-1]
         for env in reversed(cur_func_env):
             if symbol in env:
-                value_obj = env[symbol]
+                return env[symbol]
                 print(f"DEBUG: Accessing variable {symbol}, value: {value_obj}")
                 if value_obj.is_lazy():
                     # print(f"DEBUG: Resolving lazy value for variable {symbol}")
@@ -20,7 +20,6 @@ class EnvironmentManager:
                     # print(f"DEBUG: Updated variable {symbol} with resolved value: {lazy_resolved}")
                     return lazy_resolved
                 return value_obj
-
         return None
 
     def set(self, symbol, value):
@@ -29,7 +28,6 @@ class EnvironmentManager:
             if symbol in env:
                 env[symbol] = value
                 return True
-
         return False
 
     # create a new symbol in the top-most environment, regardless of whether that symbol exists

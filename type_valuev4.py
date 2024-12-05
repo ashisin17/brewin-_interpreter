@@ -56,15 +56,15 @@ def get_printable(val):
         return "false"
     return None
 
+"""
+Class = wrapper to handle lazy logic
+expr_ast = expr AST
+envr = CURR envr where expr defined
+"""
 class LazyValue:
-    def __init__(self, expr_ast, environment, interpreter):
-        """
-        Class = wrapper to handle lazy logic
-        expr_ast = expr AST
-        envr = CURR envr where expr defined
-        """
-        self.expr_ast = expr_ast
-        self.environment = environment.snapshot()  # snapshot to capture envr
+    def __init__(self, expr_ast, env_snapshot, interpreter):
+        self.expr_ast = expr_ast # expr doesnt enval it
+        self.env_snapshot = env_snapshot  # snapshot to capture envr
         self.interpreter = interpreter
         self.cached_value = None
         self.is_evaluated = False
@@ -79,25 +79,14 @@ class LazyValue:
         # print(f"DEBUG: LAZYVAL eval -> Evaluating LazyValue: {self.expr_ast}")
 
         # use snap for eval
-        previous_env = self.interpreter.env
-        self.interpreter.env = self.environment.snapshot() # switch to capture snap
+        orig_envr = self.interpreter.env
+        self.interpreter.env = self.env_snapshot # switch to capture snap
         try:
-            # Special handling for function calls
-            if self.expr_ast.elem_type == InterpreterBase.FCALL_NODE:
-                self.cached_value = self.interpreter._call_func(self.expr_ast)
-            else:
-                self.cached_value = self.interpreter._eval_expr(self.expr_ast)
-                # if isinstance(self.cached_value.value(), LazyValue):
-                #     self.cached_value = self.cached_value.value().evaluate()
-                # if self.cached_value.type() == Type.NIL:
-                #     raise Exception("LazyValue evaluation resulted in NIL unexpectedly")
-            
-            # print(f"DEBUG: LAZYVAL eval -> Evaluated LazyValue result: {self.cached_value}")
-
+            self.cached_value = self.interpreter._eval_expr(self.expr_ast)
             self.is_evaluated = True
-            self.interpreter.expression_cache[str(self.expr_ast)] = self.cached_value
         finally:
-            self.interpreter.env = previous_env
+            self.interpreter.env = orig_envr
 
         # print(f"Cached LazyValue: {self.cached_value.type()}, {self.cached_value.value()}")
         return self.cached_value
+

@@ -12,11 +12,11 @@ class EnvironmentManager:
         for env in reversed(cur_func_env):
             if symbol in env:
                 value_obj = env[symbol]
-                # print(f"DEBUG: Accessing variable {symbol}, value: {value_obj}")
+                print(f"DEBUG: Accessing variable {symbol}, value: {value_obj}")
                 if value_obj.is_lazy():
                     # print(f"DEBUG: Resolving lazy value for variable {symbol}")
                     lazy_resolved = value_obj.evaluate()
-                    env[symbol] = lazy_resolved
+                    env[symbol] = lazy_resolved # TODO: dont wanan change the envr? come back!
                     # print(f"DEBUG: Updated variable {symbol} with resolved value: {lazy_resolved}")
                     return lazy_resolved
                 return value_obj

@@ -168,20 +168,21 @@ class Interpreter(InterpreterBase):
         var_name = assign_ast.get("name")
         expr_ast = assign_ast.get("expression") # lazy eval -> dont eval yet, get expr
 
-        evaluated_value = self._eval_expr(expr_ast)
-        if evaluated_value.is_lazy():
-            # print(f"DEBUG: Evaluating lazy value for assignment to {var_name}")
-            evaluated_value = evaluated_value.evaluate()
+        # APPROACH #1: works for assignment, mutation
+        # evaluated_value = self._eval_expr(expr_ast)
+        # if evaluated_value.is_lazy():
+        #     # print(f"DEBUG: Evaluating lazy value for assignment to {var_name}")
+        #     evaluated_value = evaluated_value.evaluate()
 
-        # Invalidate cache entries involving this variable
-        # print(f"DEBUG:ASSIGN! Clearing cache entries for variable {var_name}")
-        keys_invalidate = [k for k in self.expression_cache if f"var: name: {var_name}" in str(k)]
-        for key in keys_invalidate:
-            # print(f"DEBUG: Invalidating cache for {key}")
-            del self.expression_cache[key]
+        # # Invalidate cache entries involving this variable
+        # # print(f"DEBUG:ASSIGN! Clearing cache entries for variable {var_name}")
+        # keys_invalidate = [k for k in self.expression_cache if f"var: name: {var_name}" in str(k)]
+        # for key in keys_invalidate:
+        #     # print(f"DEBUG: Invalidating cache for {key}")
+        #     del self.expression_cache[key]
 
-        # print(f"DEBUG: Assigning variable {var_name} with expression {expr_ast}")
-        
+        # _______________#         
+        # APPROACH #2: works for fcall, but leads to infinite loop in for and whatnot
         # #check for existing valyes!
         # existing_value = self.env.get(var_name)
         # if existing_value and existing_value.is_lazy():
@@ -191,13 +192,54 @@ class Interpreter(InterpreterBase):
         # lazy_value = LazyValue(expr_ast, self.env.snapshot(), self)
         # value_obj = Value(Type.NIL, lazy_value)
 
-        if not self.env.set(var_name, evaluated_value):
+        # ________________
+        #APPROAHCh 3
+        #1. check for existing lazy value
+        existing_value = self.env.get(var_name)
+        if existing_value:
+            print(f"DETECTED existing value for {var_name}")
+            if isinstance(existing_value.value(), LazyValue):
+                # Handle LazyValue without evaluating it unless in eager context
+                print(f"LazyValue detected for {var_name}, but NOT resolving during assignment -> goes to eval expr")
+
+        # 2. NO existing -> so create a lazy value for the assignment [every time new assignment, do this bc new obj reference]
+        lazy_value = LazyValue(expr_ast, self.env.snapshot(), self)
+        print(f"CREATE: NEW value for {var_name} in ASSIGN")
+        value_obj = Value(Type.NIL, lazy_value) # placeholder of nil unless eval!
+
+        # Invalidate cache entries involving this variable
+        # RECURSIVELY also invalidate expr DEP on that vraible?!
+        self.__invalidate_cache(var_name)
+
+
+        if not self.env.set(var_name, value_obj):
             super().error(
                 ErrorType.NAME_ERROR, f"Undefined variable {var_name} in assignment"
             )
-        
-        # print(f"DEBUG: Created LazyValue for {var_name} with expression {expr_ast}")
     
+        print(f"DEBUG: Assigned {var_name} with lazy expression {expr_ast}")    
+
+    def __invalidate_cache(self, var_name):
+        def __extract_dependent_variable(expr_key): # parse expr key to find var
+            if "var: name:" in str(expr_key):
+                parts = str(expr_key).split("var: name:")
+                if len(parts) > 1:
+                    return parts[1].split(",")[0].strip()
+            return None
+
+        keys_invalidate = [
+            key for key in self.expression_cache
+            if f"var: name: {var_name}" in str(key)
+        ]
+        for key in keys_invalidate:
+            print(f"DEBUG: Invalidated cache for {key}")
+            del self.expression_cache[key]
+
+            # Extract dependent variables and recursively invalidate them
+            dependent_var = __extract_dependent_variable(key)
+            if dependent_var:
+                self.__invalidate_cache(dependent_var)
+
     def __var_def(self, var_ast):
         var_name = var_ast.get("name")
         if not self.env.create(var_name, Interpreter.NIL_VALUE):
@@ -290,10 +332,10 @@ class Interpreter(InterpreterBase):
         left_value_obj = self._eval_expr(arith_ast.get("op1"))
         right_value_obj = self._eval_expr(arith_ast.get("op2"))
 
-        # print(f"DEBUG: EVAL OP for: {arith_ast.elem_type}")
-        # print("BEFORE lazy eval in eval op")
-        # print(f"DEBUG: Left operand: {left_value_obj.type()}, {left_value_obj.value()}")
-        # print(f"DEBUG: Right operand: {right_value_obj.type()}, {right_value_obj.value()}")
+        print(f"DEBUG: EVAL OP for: {arith_ast.elem_type}")
+        print("BEFORE lazy eval in eval op")
+        print(f"DEBUG: Left operand: {left_value_obj}, {left_value_obj.type()}, {left_value_obj.value()}")
+        print(f"DEBUG: Right operand: {right_value_obj}, {right_value_obj.type()}, {right_value_obj.value()}")
 
         # handle lazy obj here
         if isinstance(left_value_obj.value(), LazyValue):
@@ -305,12 +347,7 @@ class Interpreter(InterpreterBase):
             super().error(
                 ErrorType.TYPE_ERROR,
                 f"Invalid operand for {arith_ast.elem_type} operation: Left({left_value_obj.type()}), Right({right_value_obj.type()})"
-            )
-
-        # print("AFTER lazy eval in eval op")
-        # print(f"DEBUG: Left operand: {left_value_obj.type()}, {left_value_obj.value()}")
-        # print(f"DEBUG: Right operand: {right_value_obj.type()}, {right_value_obj.value()}")
-            
+            )            
         # check for compatible types
         if not self.__compatible_types(
             arith_ast.elem_type, left_value_obj, right_value_obj
@@ -496,10 +533,9 @@ class Interpreter(InterpreterBase):
     def __do_raise(self, raise_ast):
     exception_expr = raise_ast.get("exception_type")
     exception_value = self._eval_expr(exception_expr)
-    # Eagerly evaluate LazyValues
     if isinstance(exception_value.value(), LazyValue):
         exception_value = exception_value.value().evaluate()
     if exception_value.type() != Type.STRING:
         super().error(ErrorType.TYPE_ERROR, "Exception must be a string")
-    raise BrewinException(exception_value.value())
+    raise Exception(exception_value.value())
     """

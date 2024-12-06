@@ -30,15 +30,20 @@ class LazyValue:
             try:
                 original_env = interpreter.env.environment
                 interpreter.env.environment = self.env_snapshot
-
-                self.cached_value = interpreter._eval_expr(self.expr_ast)  # Evaluate
+                self.cached_value = interpreter._eval_expr(self.expr_ast)  # eval func directly called
                 self.evaluated = True
+            finally: # ensures that the orig env restores NO MATTERWHAT
+                interpreter.env.environment = original_env  # restore environment
 
-                interpreter.env.environment = original_env  # Restore environment
-            except Exception as e: # reraise xception to propagate!
-                interpreter.env.environment = original_env
-                raise e
+            # except Exception as e: # reraise xception to propagate!
+            #     interpreter.env.environment = original_env
+            #     raise e
         return self.cached_value
+
+# EXCEPTION HANDLING CLASS
+class InterpreterException(Exception):
+   def __init__(self, exception_name):
+       self.exception_name = exception_name
 
 class ExecStatus(Enum):
     CONTINUE = 1
@@ -125,12 +130,17 @@ class Interpreter(InterpreterBase):
     # add raise functionality!
     def __handle_raise(self, statement):
         expr_ast = statement.get("expression")
-        except_val = self._eval_expr(expr_ast)  # Eagerly evaluate
-
-        if not isinstance(except_val, Value) or except_val.type() != Type.STRING:
-            super().error(ErrorType.TYPE_ERROR, "raise argument MUST be a string")
-
-        raise Exception(except_val.value())
+        if expr_ast is None or not isinstance(expr_ast, dict): #expr ast must exist + be valid! 
+            super().error(ErrorType.TYPE_ERROR, "Invalid expression for raise")
+        
+        # EAGER eval for raise
+        except_val = self._eval_expr(expr_ast)
+        except_val = self.eval_asap(except_val)  # make sure lazy val is for sure resolved
+        
+        if not isinstance(except_val.value(), str): # exception type must be string!
+            super().error(ErrorType.TYPE_ERROR, "Exception must be a string")
+        
+        raise InterpreterException(except_val.value())
     
     # add try functionality!
     def __handle_try(self, statement):
@@ -148,10 +158,12 @@ class Interpreter(InterpreterBase):
 
             exception_type = str(e)
             for catch_block in catch_bs:
-                catch_type = catch_block.get("exception_type")[1:-1] # get the type by removing the quotes
+                catch_type = catch_block.get("exception_type")
+                if not catch_type or not isinstance(catch_type, str):
+                    continue  # Skip invalid catch blocks
+                catch_type = catch_type[1:-1]  # Remove quotes
                 if exception_type == catch_type:
-                    # each catch block will have its own scope so add it
-                    self.env.push_block() 
+                    self.env.push_block()
                     status, return_val = self.__run_statements(catch_block.get("statements"))
                     self.env.pop_block()
                     return status, return_val
@@ -270,7 +282,7 @@ class Interpreter(InterpreterBase):
             if expr_ast.elem_type == Interpreter.NOT_NODE:
                 return self.__eval_unary(expr_ast, Type.BOOL, lambda x: not x)
         except Exception as e: # prop excep for try and catch in eval expr
-            raise e
+            raise InterpreterException(str(e))
     
     def eval_asap(self, value):
         if isinstance(value, LazyValue):

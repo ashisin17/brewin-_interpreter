@@ -31,7 +31,7 @@ class LazyValue:
             self.cached_value = interpreter._eval_expr(self.expr_ast)  # eval LAZY expr
             self.evaluated = True
             interpreter.env.environment = original_env  # Restore original environment
-        return self.value
+        return self.cached_value
 
 class ExecStatus(Enum):
     CONTINUE = 1
@@ -154,8 +154,7 @@ class Interpreter(InterpreterBase):
         for arg in args:
             result = self._eval_expr(arg)  # result is a Value object
             # resolve ANY lazy val here!
-            if isinstance(result, LazyValue):
-                result = result.evaluate(self)
+            result = self.eval_asap(result)
             output = output + get_printable(result)
         super().output(output)
         return Interpreter.NIL_VALUE
@@ -179,14 +178,10 @@ class Interpreter(InterpreterBase):
 
     def __assign(self, assign_ast):
         var_name = assign_ast.get("name")
-        value_obj = self._eval_expr(assign_ast.get("expression"))
+        expr_ast = assign_ast.get("expression")
 
-        if isinstance(value_obj, Value): # direc assign the val
-            # Directly assign the evaluated Value object
-            value_obj = value_obj
-        else: # eval lazily
-            env_snapshot = self.env.snapshot()
-            value_obj = LazyValue(value_obj, env_snapshot)
+        env_snapshot = self.env.snapshot()
+        value_obj = LazyValue(expr_ast, env_snapshot)
         
         if not self.env.set(var_name, value_obj):
             super().error(ErrorType.NAME_ERROR, f"Undefined variable {var_name} in assignment")
@@ -216,17 +211,29 @@ class Interpreter(InterpreterBase):
                 super().error(ErrorType.NAME_ERROR, f"Variable {var_name} not found")
             return val
         if expr_ast.elem_type == InterpreterBase.FCALL_NODE:
-            return self.__call_func(expr_ast)
+            return self.__call_func(expr_ast) # dont call func eagerly during eval expr, and instead save as lazy valye!
+            # env_snapshot = self.env.snapshot() # this part didnt work
+            # return LazyValue(expr_ast, env_snapshot)
         if expr_ast.elem_type in Interpreter.BIN_OPS:
             return self.__eval_op(expr_ast)
         if expr_ast.elem_type == Interpreter.NEG_NODE:
             return self.__eval_unary(expr_ast, Type.INT, lambda x: -1 * x)
         if expr_ast.elem_type == Interpreter.NOT_NODE:
             return self.__eval_unary(expr_ast, Type.BOOL, lambda x: not x)
+    
+    def eval_asap(self, value):
+        if isinstance(value, LazyValue):
+            return value.evaluate(self)
+        return value
 
     def __eval_op(self, arith_ast):
         left_value_obj = self._eval_expr(arith_ast.get("op1"))
+        # resolve lazy dependencies in eval op!
+        if isinstance(left_value_obj, LazyValue):
+            left_value_obj = self.eval_asap(left_value_obj)
         right_value_obj = self._eval_expr(arith_ast.get("op2"))
+        if isinstance(right_value_obj, LazyValue):
+            right_value_obj = self.eval_asap(right_value_obj)
         if not self.__compatible_types(
             arith_ast.elem_type, left_value_obj, right_value_obj
         ):

@@ -290,6 +290,24 @@ class Interpreter(InterpreterBase):
         if isinstance(left_value_obj, LazyValue):
             left_value_obj = self.eval_asap(left_value_obj)
 
+        # SHORT CIRCUITING -> just eval the LEFT ONE FIRST!
+        if arith_ast.elem_type == "&&":
+            if not left_value_obj.value(): # left op is false -> return false
+                return Value(Type.BOOL, False)
+            right_value_obj = self._eval_expr(arith_ast.get("op2")) # else eval the right one
+            if isinstance(right_value_obj, LazyValue):
+                right_value_obj = self.eval_asap(right_value_obj)
+            return Value(Type.BOOL, right_value_obj.value())
+
+        if arith_ast.elem_type == "||":
+            if left_value_obj.value(): # if left is TRUE -> just return true without eval the right!
+                return Value(Type.BOOL, True)
+            right_value_obj = self._eval_expr(arith_ast.get("op2")) # if false -> do the right!
+            if isinstance(right_value_obj, LazyValue):
+                right_value_obj = self.eval_asap(right_value_obj)
+            return Value(Type.BOOL, right_value_obj.value())
+
+        # continue with evaluating the right operatin!
         right_value_obj = self._eval_expr(arith_ast.get("op2"))
         if isinstance(right_value_obj, LazyValue):
             right_value_obj = self.eval_asap(right_value_obj)

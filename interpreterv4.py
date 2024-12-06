@@ -242,32 +242,35 @@ class Interpreter(InterpreterBase):
             )
 
     def _eval_expr(self, expr_ast):
-        if isinstance(expr_ast, LazyValue): # handle lazy eval
-            return expr_ast.evaluate(self)
-        if expr_ast.elem_type == InterpreterBase.NIL_NODE:
-            return Interpreter.NIL_VALUE
-        if expr_ast.elem_type == InterpreterBase.INT_NODE:
-            return Value(Type.INT, expr_ast.get("val"))
-        if expr_ast.elem_type == InterpreterBase.STRING_NODE:
-            return Value(Type.STRING, expr_ast.get("val"))
-        if expr_ast.elem_type == InterpreterBase.BOOL_NODE:
-            return Value(Type.BOOL, expr_ast.get("val"))
-        if expr_ast.elem_type == InterpreterBase.VAR_NODE:
-            var_name = expr_ast.get("name")
-            val = self.env.get(var_name)
-            if val is None:
-                super().error(ErrorType.NAME_ERROR, f"Variable {var_name} not found")
-            return val
-        if expr_ast.elem_type == InterpreterBase.FCALL_NODE:
-            return self.__call_func(expr_ast) # dont call func eagerly during eval expr, and instead save as lazy valye!
-            # env_snapshot = self.env.snapshot() # this part didnt work
-            # return LazyValue(expr_ast, env_snapshot)
-        if expr_ast.elem_type in Interpreter.BIN_OPS:
-            return self.__eval_op(expr_ast)
-        if expr_ast.elem_type == Interpreter.NEG_NODE:
-            return self.__eval_unary(expr_ast, Type.INT, lambda x: -1 * x)
-        if expr_ast.elem_type == Interpreter.NOT_NODE:
-            return self.__eval_unary(expr_ast, Type.BOOL, lambda x: not x)
+        try:
+            if isinstance(expr_ast, LazyValue): # handle lazy eval
+                return expr_ast.evaluate(self)
+            if expr_ast.elem_type == InterpreterBase.NIL_NODE:
+                return Interpreter.NIL_VALUE
+            if expr_ast.elem_type == InterpreterBase.INT_NODE:
+                return Value(Type.INT, expr_ast.get("val"))
+            if expr_ast.elem_type == InterpreterBase.STRING_NODE:
+                return Value(Type.STRING, expr_ast.get("val"))
+            if expr_ast.elem_type == InterpreterBase.BOOL_NODE:
+                return Value(Type.BOOL, expr_ast.get("val"))
+            if expr_ast.elem_type == InterpreterBase.VAR_NODE:
+                var_name = expr_ast.get("name")
+                val = self.env.get(var_name)
+                if val is None:
+                    super().error(ErrorType.NAME_ERROR, f"Variable {var_name} not found")
+                return val
+            if expr_ast.elem_type == InterpreterBase.FCALL_NODE:
+                return self.__call_func(expr_ast) # dont call func eagerly during eval expr, and instead save as lazy valye!
+                # env_snapshot = self.env.snapshot() # this part didnt work
+                # return LazyValue(expr_ast, env_snapshot)
+            if expr_ast.elem_type in Interpreter.BIN_OPS:
+                return self.__eval_op(expr_ast)
+            if expr_ast.elem_type == Interpreter.NEG_NODE:
+                return self.__eval_unary(expr_ast, Type.INT, lambda x: -1 * x)
+            if expr_ast.elem_type == Interpreter.NOT_NODE:
+                return self.__eval_unary(expr_ast, Type.BOOL, lambda x: not x)
+        except Exception as e: # prop excep for try and catch in eval expr
+            raise e
     
     def eval_asap(self, value):
         if isinstance(value, LazyValue):

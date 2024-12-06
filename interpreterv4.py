@@ -32,12 +32,11 @@ class LazyValue:
                 interpreter.env.environment = self.env_snapshot
                 self.cached_value = interpreter._eval_expr(self.expr_ast)  # eval func directly called
                 self.evaluated = True
+            except Exception as e: # reraise xception to propagate!
+                interpreter.env.environment = original_env
+                raise e
             finally: # ensures that the orig env restores NO MATTERWHAT
                 interpreter.env.environment = original_env  # restore environment
-
-            # except Exception as e: # reraise xception to propagate!
-            #     interpreter.env.environment = original_env
-            #     raise e
         return self.cached_value
 
 # EXCEPTION HANDLING CLASS
@@ -129,8 +128,8 @@ class Interpreter(InterpreterBase):
     
     # add raise functionality!
     def __handle_raise(self, statement):
-        expr_ast = statement.get("expression")
-        if expr_ast is None or not isinstance(expr_ast, dict): #expr ast must exist + be valid! 
+        expr_ast = statement.get("exception_type")
+        if expr_ast is None: #expr ast must exist + be valid! -> add check: or not isinstance(expr_ast, dict)
             super().error(ErrorType.TYPE_ERROR, "Invalid expression for raise")
         
         # EAGER eval for raise
@@ -156,20 +155,16 @@ class Interpreter(InterpreterBase):
         except Exception as e:
             self.env.pop_block()  # try block HAS to be cleared after!
 
-            exception_type = str(e)
+            exception_type = e.exception_name
             for catch_block in catch_bs:
-                catch_type = catch_block.get("exception_type")
-                if not catch_type or not isinstance(catch_type, str):
-                    continue  # Skip invalid catch blocks
-                catch_type = catch_type[1:-1]  # Remove quotes
-                if exception_type == catch_type:
-                    self.env.push_block()
+                catch_type = catch_block.get("exception_type")  # get excep type
+                if catch_type.strip("\"") == exception_type:  # MATCH string literal by removing quotes
+                    self.env.push_block()  # NEW SCOPE for catch block
                     status, return_val = self.__run_statements(catch_block.get("statements"))
                     self.env.pop_block()
                     return status, return_val
 
-            # prop exception if no match
-            raise e
+            raise e # prop exception if no match
 
     def __call_func(self, call_node):
         func_name = call_node.get("name")
@@ -299,10 +294,9 @@ class Interpreter(InterpreterBase):
         if isinstance(right_value_obj, LazyValue):
             right_value_obj = self.eval_asap(right_value_obj)
 
-        # division by 0 exception
-        if arith_ast.elem_type == "/":
-            if right_value_obj.value() == 0:
-                raise Exception("div0")
+        # division by 0 exception -> raise the special class exception
+        if arith_ast.elem_type == "/" and right_value_obj.value() == 0:
+            raise InterpreterException("div0")
 
         # check compatibilities!    
         if not self.__compatible_types(

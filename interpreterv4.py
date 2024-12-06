@@ -22,6 +22,8 @@ class LazyValue:
 
     def evaluate(self, interpreter):
         if self.evaluated:
+            if isinstance(self.cached_value, InterpreterException): # need to raise cached expr as well
+                raise self.cached_value
             return self.cached_value
         # got direct val obj, so return as is
         if isinstance(self.expr_ast, Value):  
@@ -32,8 +34,9 @@ class LazyValue:
                 interpreter.env.environment = self.env_snapshot
                 self.cached_value = interpreter._eval_expr(self.expr_ast)  # eval func directly called
                 self.evaluated = True
-            except Exception as e: # reraise xception to propagate!
-                interpreter.env.environment = original_env
+            except InterpreterException as e: # reraise xception to propagate!
+                self.cached_value = e  # cache expr
+                self.evaluated = True
                 raise e
             finally: # ensures that the orig env restores NO MATTERWHAT
                 interpreter.env.environment = original_env  # restore environment
@@ -192,12 +195,17 @@ class Interpreter(InterpreterBase):
         # first evaluate all of the actual parameters and associate them with the formal parameter names
         args = {}
         for formal_ast, actual_ast in zip(formal_args, actual_args):
-            result = copy.copy(self._eval_expr(actual_ast))
-            arg_name = formal_ast.get("name")
-            args[arg_name] = result
-            # Should we do lazy eval for args?
-            # env_snapshot = self.env.snapshot()
-            # args[formal_ast.get("name")] = LazyValue(actual_ast, env_snapshot)
+            # result = copy.copy(self._eval_expr(actual_ast))
+            # arg_name = formal_ast.get("name")
+            # args[arg_name] = result
+            try:
+                result = copy.copy(self._eval_expr(actual_ast))
+                arg_name = formal_ast.get("name")
+                args[arg_name] = result
+            except InterpreterException as e: # save exception in ARG for LATER lazy eval!
+                # Save the exception in the argument for later lazy evaluation
+                arg_name = formal_ast.get("name")
+                args[arg_name] = e
 
         # then create the new activation record 
         self.env.push_func()

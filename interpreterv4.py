@@ -222,9 +222,9 @@ class Interpreter(InterpreterBase):
         if args is not None and len(args) == 1:
             result = self._eval_expr(args[0])
             # eager eval for input funcs
-            if isinstance(result, LazyValue):
-                result = result.get_value(self)
+            result = result.evaluate(self)
             super().output(get_printable(result))
+
         elif args is not None and len(args) > 1:
             super().error(
                 ErrorType.NAME_ERROR, "No inputi() function that takes > 1 parameter"
@@ -457,7 +457,7 @@ class Interpreter(InterpreterBase):
 
             # eager EVAL: for
             if isinstance(run_for, LazyValue):
-                run_for = run_for.get_value(self)
+                run_for = run_for.evaluate(self)
 
             if run_for.type() != Type.BOOL:
                 super().error(

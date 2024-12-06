@@ -23,14 +23,21 @@ class LazyValue:
     def evaluate(self, interpreter):
         if self.evaluated:
             return self.cached_value
-        if not self.evaluated:
-            if isinstance(self.expr_ast, Value): # if it is a val obj -> just return it!
-                self.cached_value = self.expr_ast
-            original_env = interpreter.env.environment  # save curr env
-            interpreter.env.environment = self.env_snapshot  # REPLACE envr
-            self.cached_value = interpreter._eval_expr(self.expr_ast)  # eval LAZY expr
-            self.evaluated = True
-            interpreter.env.environment = original_env  # Restore original environment
+        # got direct val obj, so return as is
+        if isinstance(self.expr_ast, Value):  
+            self.cached_value = self.expr_ast
+        else:
+            try:
+                original_env = interpreter.env.environment
+                interpreter.env.environment = self.env_snapshot
+
+                self.cached_value = interpreter._eval_expr(self.expr_ast)  # Evaluate
+                self.evaluated = True
+
+                interpreter.env.environment = original_env  # Restore environment
+            except Exception as e: # reraise xception to propagate!
+                interpreter.env.environment = original_env
+                raise e
         return self.cached_value
 
 class ExecStatus(Enum):
@@ -98,6 +105,8 @@ class Interpreter(InterpreterBase):
         return_val = None
         if statement.elem_type == InterpreterBase.FCALL_NODE:
             self.__call_func(statement)
+        elif statement.elem_type == "raise": # add the raise!
+            self.__handle_raise(statement)
         elif statement.elem_type == "=":
             self.__assign(statement)
         elif statement.elem_type == InterpreterBase.VAR_DEF_NODE:
@@ -110,6 +119,16 @@ class Interpreter(InterpreterBase):
             status, return_val = self.__do_for(statement)
 
         return (status, return_val)
+    
+    # add raise functionality!
+    def __handle_raise(self, statement):
+        expr_ast = statement.get("expression")
+        exception_value = self._eval_expr(expr_ast)  # Eagerly evaluate
+
+        if not isinstance(exception_value, Value) or exception_value.type() != Type.STRING:
+            super().error(ErrorType.TYPE_ERROR, "raise argument must be a string")
+
+        raise Exception(exception_value.value())
     
     def __call_func(self, call_node):
         func_name = call_node.get("name")

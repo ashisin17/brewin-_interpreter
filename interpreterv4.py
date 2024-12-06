@@ -101,7 +101,9 @@ class Interpreter(InterpreterBase):
                 self.env.pop_block()
                 return (status, return_val)
 
-        self.env.pop_block()
+        # only pop if it has the blocks!
+        if self.env.has_blocks():  
+            self.env.pop_block()
         return (ExecStatus.CONTINUE, Interpreter.NIL_VALUE)
 
     def __run_statement(self, statement):
@@ -153,7 +155,9 @@ class Interpreter(InterpreterBase):
             self.env.pop_block()
             return status, return_val
         except Exception as e:
-            self.env.pop_block()  # try block HAS to be cleared after!
+            # try block HAS to be cleared after!
+            if self.env.has_blocks():
+                self.env.pop_block()
 
             exception_type = e.exception_name
             for catch_block in catch_bs:

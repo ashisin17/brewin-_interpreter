@@ -1,6 +1,6 @@
 from intbase import InterpreterBase
 
-
+# update to get it in the top!
 # Enumerated type for our different language data types
 class Type:
     INT = "int"

@@ -42,7 +42,11 @@ class EnvironmentManager:
     def pop_block(self):
         cur_func_env = self.environment[-1]
         cur_func_env.pop() 
-
+    
+    def has_blocks(self):
+        cur_func_env = self.environment[-1]
+        return len(cur_func_env) > 0
+    
     # used when we exit a nested block to discard the environment for that block
     def pop_func(self):
         self.environment.pop()

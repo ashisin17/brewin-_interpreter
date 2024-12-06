@@ -1,18 +1,22 @@
 from interpreterv4 import Interpreter # this may vary
 
 program = """
-func foo() {
-  print("foo");
-  return 4;
+func zero() {
+  print("zero");
+  return 0;
+}
+
+func inc(x) {
+ print("inc:", x);
+ return x + 1;
 }
 
 func main() {
-  foo();
-  print("---");
-  var x;
-  x = foo();
-  print("---");
-  print(x); 
+ var a;
+ for (a = 0; zero() + a < 3; a = inc(a)) {
+   print("x");
+ }
+ print("d");
 }
 
 

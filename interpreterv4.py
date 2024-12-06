@@ -107,6 +107,8 @@ class Interpreter(InterpreterBase):
             self.__call_func(statement)
         elif statement.elem_type == "raise": # add the raise!
             self.__handle_raise(statement)
+        elif statement.elem_type == "try": # add try catch block
+            return self.__handle_try(statement)
         elif statement.elem_type == "=":
             self.__assign(statement)
         elif statement.elem_type == InterpreterBase.VAR_DEF_NODE:
@@ -123,13 +125,40 @@ class Interpreter(InterpreterBase):
     # add raise functionality!
     def __handle_raise(self, statement):
         expr_ast = statement.get("expression")
-        exception_value = self._eval_expr(expr_ast)  # Eagerly evaluate
+        except_val = self._eval_expr(expr_ast)  # Eagerly evaluate
 
-        if not isinstance(exception_value, Value) or exception_value.type() != Type.STRING:
-            super().error(ErrorType.TYPE_ERROR, "raise argument must be a string")
+        if not isinstance(except_val, Value) or except_val.type() != Type.STRING:
+            super().error(ErrorType.TYPE_ERROR, "raise argument MUST be a string")
 
-        raise Exception(exception_value.value())
+        raise Exception(except_val.value())
     
+    # add try functionality!
+    def __handle_try(self, statement):
+        try_b = statement.get("statements")
+        catch_bs = statement.get("catchers")  # multiple catch blocks
+
+        try:
+            # new scope for try to reset!
+            self.env.push_block()  
+            status, return_val = self.__run_statements(try_b)
+            self.env.pop_block()
+            return status, return_val
+        except Exception as e:
+            self.env.pop_block()  # try block HAS to be cleared after!
+
+            exception_type = str(e)
+            for catch_block in catch_bs:
+                catch_type = catch_block.get("exception_type")[1:-1] # get the type by removing the quotes
+                if exception_type == catch_type:
+                    # each catch block will have its own scope so add it
+                    self.env.push_block() 
+                    status, return_val = self.__run_statements(catch_block.get("statements"))
+                    self.env.pop_block()
+                    return status, return_val
+
+            # prop exception if no match
+            raise e
+
     def __call_func(self, call_node):
         func_name = call_node.get("name")
         actual_args = call_node.get("args")
@@ -246,13 +275,21 @@ class Interpreter(InterpreterBase):
         return value
 
     def __eval_op(self, arith_ast):
+        # order of eval must be LEFT -> right
         left_value_obj = self._eval_expr(arith_ast.get("op1"))
-        # resolve lazy dependencies in eval op!
         if isinstance(left_value_obj, LazyValue):
             left_value_obj = self.eval_asap(left_value_obj)
+
         right_value_obj = self._eval_expr(arith_ast.get("op2"))
         if isinstance(right_value_obj, LazyValue):
             right_value_obj = self.eval_asap(right_value_obj)
+
+        # division by 0 exception
+        if arith_ast.elem_type == "/":
+            if right_value_obj.value() == 0:
+                raise Exception("div0")
+
+        # check compatibilities!    
         if not self.__compatible_types(
             arith_ast.elem_type, left_value_obj, right_value_obj
         ):

@@ -56,3 +56,7 @@ class EnvironmentManager:
             [{k: v for k, v in env.items()} for env in func_env]
             for func_env in self.environment
         ]
+    
+    def func_snapshot(self): # copy only the TOP FUNC's envr
+        top_func_env = self.environment[-1]
+        return [{k: v for k, v in block.items()} for block in top_func_env]

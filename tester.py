@@ -47,7 +47,6 @@ func main() {
   print(y);
   print(x);
 }
-
 """
 
 interpreter = Interpreter()

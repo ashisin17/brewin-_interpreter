@@ -199,9 +199,13 @@ class Interpreter(InterpreterBase):
             # arg_name = formal_ast.get("name")
             # args[arg_name] = result
             try:
-                result = copy.copy(self._eval_expr(actual_ast))
                 arg_name = formal_ast.get("name")
+                result = copy.copy(self._eval_expr(actual_ast))
                 args[arg_name] = result
+                env_snapshot = self.env.func_snapshot()
+                # # Instead of evaluating `actual_ast` now, wrap it in a LazyValue
+                # lazy_arg = LazyValue(actual_ast, env_snapshot)
+                # args[arg_name] = lazy_arg
             except InterpreterException as e: # save exception in ARG for LATER lazy eval!
                 # Save the exception in the argument for later lazy evaluation
                 arg_name = formal_ast.get("name")
@@ -302,21 +306,30 @@ class Interpreter(InterpreterBase):
         if isinstance(left_value_obj, LazyValue):
             left_value_obj = self.eval_asap(left_value_obj)
 
-        # SHORT CIRCUITING -> just eval the LEFT ONE FIRST!
+        # SHORT CIRCUITING -> just eval the LEFT ONE FIRST! FOR BOOL OPS
         if arith_ast.elem_type == "&&":
+            if left_value_obj.type() != Type.BOOL:  
+                super().error(ErrorType.TYPE_ERROR, f"Left operand of '&&' must be a BOOL var")
             if not left_value_obj.value(): # left op is false -> return false
                 return Value(Type.BOOL, False)
+            
             right_value_obj = self._eval_expr(arith_ast.get("op2")) # else eval the right one
             if isinstance(right_value_obj, LazyValue):
                 right_value_obj = self.eval_asap(right_value_obj)
+            if right_value_obj.type() != Type.BOOL:  
+                super().error(ErrorType.TYPE_ERROR, f"Left operand of '&&' must be a BOOL var")
             return Value(Type.BOOL, right_value_obj.value())
 
         if arith_ast.elem_type == "||":
+            if left_value_obj.type() != Type.BOOL:  
+                super().error(ErrorType.TYPE_ERROR, f"Left operand of '||' must be a BOOL var")
             if left_value_obj.value(): # if left is TRUE -> just return true without eval the right!
                 return Value(Type.BOOL, True)
             right_value_obj = self._eval_expr(arith_ast.get("op2")) # if false -> do the right!
             if isinstance(right_value_obj, LazyValue):
                 right_value_obj = self.eval_asap(right_value_obj)
+            if right_value_obj.type() != Type.BOOL:  
+                super().error(ErrorType.TYPE_ERROR, f"Left operand of '||' must be a BOOL var")
             return Value(Type.BOOL, right_value_obj.value())
 
         # continue with evaluating the right operatin!
